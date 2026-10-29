@@ -1,0 +1,16 @@
+# data and outputs never go in the repository
+*.root
+*.parquet
+*.npz
+*.pkl
+*.log
+data/slim*/
+reports/
+runs/
+outputs/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+# the small example file for the tests is kept
+!tests/data/*.parquet

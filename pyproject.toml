@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xsum"
+version = "0.0.1"
+description = "XSuM-MINERvA: a surrogate detector model for the MINERvA open dataset"
+requires-python = ">=3.9"
+dynamic = ["dependencies"]
+
+[tool.setuptools]
+packages = ["xsum", "xsum.io", "xsum.prep", "xsum.data", "xsum.models", "xsum.train", "xsum.eval"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
