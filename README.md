@@ -64,14 +64,6 @@ distribution. Uncertainties: the surrogate is stochastic (its sampling spread is
 spread between the four ensemble members is the model uncertainty, carried as systematic universes. The output branches
 and the recipe to propagate the universes are in [`docs/surrogate_files.md`](docs/surrogate_files.md).
 
-Generator samples need a vertex in MINERvA detector coordinates. The converters in `scripts/curate/` read NuWro and GiBUU
-output that carries one; placing events in the detector geometry is the generator side's job.
-
-## Large files
-
-The slimmed training data (about 12 GB), the generator truth samples and the surrogate output files (about 1.3 GB each)
-are not in this repository. The weights are: five checkpoints of 15 MB.
-
 ## License
 
 Copyright 2026 Fermi Forward Discovery Group, LLC. The code, the model weights and the example data in this repository
