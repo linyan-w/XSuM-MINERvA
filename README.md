@@ -72,6 +72,12 @@ output that carries one; placing events in the detector geometry is the generato
 The slimmed training data (about 12 GB), the generator truth samples and the surrogate output files (about 1.3 GB each)
 are not in this repository. The weights are: five checkpoints of 15 MB.
 
+## License
+
+Copyright 2026 Fermi Forward Discovery Group, LLC. The code, the model weights and the example data in this repository
+are released under the Apache License, Version 2.0 (see `LICENSE`). Fermilab is operated by Fermi Forward Discovery
+Group, LLC under Contract No. 89243024CSC000002 with the U.S. Department of Energy.
+
 ## Citation
 
 Paper in preparation; a citation will be added here.
