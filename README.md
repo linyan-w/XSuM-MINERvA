@@ -19,13 +19,13 @@ See [`docs/model.md`](docs/model.md).
 | path | content |
 |---|---|
 | `xsum/` | the package: tuple I/O, input preparation, model, training, evaluation |
-| `scripts/curate/` | slim the open-data tuples, build truth files from the open dataset and from NuWro / GiBUU output |
+| `scripts/curate/` | slim the open-data tuples, build the truth file of the open dataset, merge and thin generator truth files |
 | `scripts/train/` | the two training stages and `train_all.sh`, the chain that produced the released weights |
-| `scripts/infer/` | run a model on a truth file, write the ntuple, conform it to the full open-dataset schema |
+| `scripts/infer/` | run a model on a truth file (in slices for large ones), write the ntuple, conform it to the full open-dataset schema |
 | `scripts/evaluate/` | closure classifier, ensemble spread, 2p2h holdout comparison |
 | `paper/` | the paper's figures and tables, regenerated from `paper/inputs/` and the weights |
 | `weights/` | the deployed model (`full`), its three ensemble members (`full_s1..3`) and the 2p2h holdout model |
-| `docs/` | output-file format and the uncertainty recipe (`surrogate_files.md`), the model, tuple conventions |
+| `docs/` | output-file format and the uncertainty recipe (`surrogate_files.md`), the input format (`generator_input.md`), the model, tuple conventions |
 | `tests/` | unit tests on a small example of the open dataset (`tests/data/`) |
 
 ## Quick start
@@ -42,6 +42,11 @@ python scripts/curate/genie_truth.py data/genie_test.truth.parquet --population 
 # 2. inference: truth file -> surrogate ntuple with the four ensemble universes (docs/surrogate_files.md)
 python scripts/infer/surrogate_to_ntuple.py weights/full data/genie_test.truth.parquet out.root --ensemble weights/full_s1 weights/full_s2 weights/full_s3
 python scripts/infer/conform_ntuple.py out.root REFERENCE_AnaTuple.root out_full.root --strict      # optional: full 3,687-branch schema
+
+# 2b. another generator: a truth file in the open dataset's layout (docs/generator_input.md), large files in slices
+python scripts/curate/merge_truth_shards.py data/nuwro.truth.parquet shards/*.parquet
+python scripts/curate/thin_truth.py data/nuwro.truth.parquet data/nuwro_1e20.truth.parquet --pot 1e20     # optional: a smaller exposure
+bash scripts/infer/infer_sliced.sh data/nuwro_1e20.truth.parquet out_nuwro.root
 
 # 3. training (about 4 h per model on one GPU) and the paper's evaluations
 bash scripts/train/train_all.sh
@@ -60,9 +65,11 @@ after final-state interactions (species and three-momentum; hadrons above 10 MeV
 It returns whether the event is reconstructed, the muon momentum and direction, the reconstructed vertex, three
 calorimetric energies, the number of hadron prongs and, per prong, direction, momentum under the pion and proton
 hypotheses, proton score and the fit flags. The dead-time cut variable is not modelled; it is drawn from the open dataset's
-distribution. Uncertainties: the surrogate is stochastic (its sampling spread is the learned detector resolution), and the
-spread between the four ensemble members is the model uncertainty, carried as systematic universes. The output branches
-and the recipe to propagate the universes are in [`docs/surrogate_files.md`](docs/surrogate_files.md).
+distribution. The output file has two trees like the open dataset: `Truth` with every input event and `MasterAnaDev` with
+the reconstructed ones. Uncertainties: the surrogate is stochastic (its sampling spread is the learned detector resolution),
+and the spread between the four ensemble members is the model uncertainty, carried as systematic universes with one
+weight per reconstruction flag. The output branches and the recipe to propagate the universes are in
+[`docs/surrogate_files.md`](docs/surrogate_files.md); the input file layout is in [`docs/generator_input.md`](docs/generator_input.md).
 
 ## License
 

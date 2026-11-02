@@ -1,11 +1,17 @@
 #!/usr/bin/env python
 """Run the surrogate on truth events and write a pruned MasterAnaDev-style ntuple (docs/PROJECT.md 13.4).
 
-Usage: scripts/infer/surrogate_to_ntuple.py MODEL_DIR TRUTH.parquet OUT.root [--n N] [--steps 64] [--seed 0]
+Usage: scripts/infer/surrogate_to_ntuple.py MODEL_DIR TRUTH.parquet OUT.root [--n N | --range START STOP] [--steps 64] [--seed 0]
 Input: a slimmed Truth-tree Parquet (or any file with the same truth branches). Output tree `MasterAnaDev`
 with the truth passthrough branches, the sampled Tier 0 flags, the muon/vertex/calorimetry blocks, the prong
 multiplicity and, for an M3 model, the prong branches (pion/proton/sec_protons blocks) and a plane-snapped
-vertex z. Only events the surrogate marks as reconstructed are written (like the real tuple).
+vertex z. Like the open dataset, the file holds two trees: `Truth` with every input event (the input's truth branches,
+plus `surrogate_in_population`, the nominal reconstruction probability `surrogate_p_reco_exists`, the sampled flag
+`surrogate_reco_exists` and, with --ensemble, each member's probability `surrogate_univ_p_reco_exists[K]`), and
+`MasterAnaDev` with the events the surrogate reconstructed. Events outside the training volume (true vertex z outside
+4000-8700 mm) are never reconstructed by the surrogate and appear in `Truth` only.
+Large inputs run in slices (--range START STOP reads only the Parquet row groups that cover the slice, one output file
+per slice with its own --seed) that scripts/infer/merge_ntuples.py concatenates in order.
 """
 import argparse, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
@@ -44,14 +50,22 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("model_dir"); ap.add_argument("truth"); ap.add_argument("out")
     ap.add_argument("--n", type=int, default=None); ap.add_argument("--steps", type=int, default=64); ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--range", type=int, nargs=2, metavar=("START", "STOP"), default=None, help="input events [START, STOP) only (one slice of a large sample; merge the slices with scripts/infer/merge_ntuples.py)")
     ap.add_argument("--deadtime", default=DEADTIME_TABLE if pathlib.Path(DEADTIME_TABLE).exists() else None, help="empirical table of the dead-time cut variable (scripts/curate/deadtime_table.py); drawn per event by reconstructed vertex z, independently of the event; '' to skip")
     ap.add_argument("--ensemble", nargs="*", default=[], help="further members of an ensemble (model directories trained with other seeds, scripts/train/train_all.sh): the nominal sample draws each batch from a random member, and the epistemic columns are the spread between the members' common-noise draws instead of posterior draws")
     a = ap.parse_args()
     torch.manual_seed(a.seed)
-    truth = ak.from_parquet(a.truth)
+    if a.range:  # read only the row groups that cover the slice
+        import pyarrow.parquet as pq
+        pf = pq.ParquetFile(a.truth); sizes = [pf.metadata.row_group(i).num_rows for i in range(pf.metadata.num_row_groups)]; starts = np.concatenate([[0], np.cumsum(sizes)])
+        s0, s1 = a.range[0], min(a.range[1], int(starts[-1])); rg = [i for i in range(len(sizes)) if starts[i] < s1 and starts[i + 1] > s0]
+        truth = ak.from_parquet(a.truth, row_groups=rg)[s0 - int(starts[rg[0]]):s1 - int(starts[rg[0]])]
+        print(f"slice [{s0}, {s1}) of {int(starts[-1])} events, row groups {rg[0]}-{rg[-1]}", flush=True)
+    else:
+        truth = ak.from_parquet(a.truth)
     ck = torch.load(pathlib.Path(a.model_dir) / "model.pt", map_location="cpu", weights_only=False); sel = selection_from_config(ck["config"])
-    truth = truth[in_population(truth, sel["population"])]
     if a.n: truth = truth[:a.n]
+    truth_all = truth; pop = in_population(truth_all, sel["population"]); truth = truth_all[pop]; pop_idx = np.flatnonzero(pop)
     tier2 = ck["config"].get("tier2", False)
     d = truth_to_compact(truth, **sel)
     if tier2:
@@ -143,10 +157,12 @@ def main():
             # flags given the nominal outcomes); the analysis fills one histogram per universe with these values and weights
             from xsum.prep.frames import theta_phi_beam
             K = len(Ys); Pn = P0[exist]; Pk = np.array(Ps); eps = 1e-6
-            w = np.clip(Pk[:, :, 0], eps, 1) / np.clip(Pn[None, :, 0], eps, 1)
-            w *= np.where(minos[None, :], np.clip(Pk[:, :, 1], eps, 1) / np.clip(Pn[None, :, 1], eps, 1), np.clip(1 - Pk[:, :, 1], eps, 1) / np.clip(1 - Pn[None, :, 1], eps, 1))
-            w *= np.where(minos[None, :], np.where(charge[None, :], np.clip(Pk[:, :, 2], eps, 1) / np.clip(Pn[None, :, 2], eps, 1), np.clip(1 - Pk[:, :, 2], eps, 1) / np.clip(1 - Pn[None, :, 2], eps, 1)), 1.0)
-            out["surrogate_univ_weight"] = np.ascontiguousarray(w.T)
+            # one weight per flag (each can be propagated on its own) and their product
+            w_reco = np.clip(Pk[:, :, 0], eps, 1) / np.clip(Pn[None, :, 0], eps, 1)
+            w_minos = np.where(minos[None, :], np.clip(Pk[:, :, 1], eps, 1) / np.clip(Pn[None, :, 1], eps, 1), np.clip(1 - Pk[:, :, 1], eps, 1) / np.clip(1 - Pn[None, :, 1], eps, 1))
+            w_charge = np.where(minos[None, :], np.where(charge[None, :], np.clip(Pk[:, :, 2], eps, 1) / np.clip(Pn[None, :, 2], eps, 1), np.clip(1 - Pk[:, :, 2], eps, 1) / np.clip(1 - Pn[None, :, 2], eps, 1)), 1.0)
+            out["surrogate_univ_weight_reco"] = np.ascontiguousarray(w_reco.T); out["surrogate_univ_weight_minos"] = np.ascontiguousarray(w_minos.T); out["surrogate_univ_weight_charge"] = np.ascontiguousarray(w_charge.T)
+            out["surrogate_univ_weight"] = np.ascontiguousarray((w_reco * w_minos * w_charge).T)
             Pu = np.linalg.norm(Ys[:, :, :3], axis=2); thu = np.array([theta_phi_beam(y[:, 0], y[:, 1], y[:, 2])[0] for y in Ys])
             for name, arr in (("muon_P", Pu), ("muon_theta", thu), ("muon_Px", Ys[:, :, 0]), ("muon_Py", Ys[:, :, 1]), ("muon_Pz", Ys[:, :, 2]), ("vtx_x", Ys[:, :, 3]), ("vtx_y", Ys[:, :, 4]), ("vtx_z", Ys[:, :, 5]),
                               ("recoil_E", Ys[:, :, 6]), ("recoil_nonvtx100", Ys[:, :, 9]), ("nonvtx_iso_blobs_E", Ys[:, :, 10])):
@@ -158,8 +174,15 @@ def main():
         out["surrogate_epi_recoil_E"] = sd[:, 6]; out["surrogate_epi_recoil_nonvtx100"] = sd[:, 9]; out["surrogate_epi_nonvtx_iso_blobs_energy"] = sd[:, 10]
         Ps = np.array(Ps); out["surrogate_epi_p_reco_exists"] = Ps[:, :, 0].std(0); out["surrogate_epi_p_minos"] = Ps[:, :, 1].std(0); out["surrogate_epi_p_charge_neg"] = Ps[:, :, 2].std(0)
         out["surrogate_epi_n_prongs"] = np.array(Ns).std(0); out["surrogate_epi_draws"] = np.full(exist.sum(), a.epi_draws, dtype=np.int32)
-    write_ntuple(a.out, out)
-    print(f"{len(truth)} truth events -> {exist.sum()} reconstructed ({exist.mean()*100:.1f}%) -> {a.out}")
+    # Truth tree: every input event, like the open dataset's, with the surrogate's reconstruction probability and sampled flag
+    N_all = len(truth_all); pr = np.zeros(N_all); pr[pop_idx] = P0[:, 0]; rf = np.zeros(N_all, bool); rf[pop_idx] = exist
+    T = {k: truth_all[k] for k in truth_all.fields}
+    T["surrogate_in_population"] = pop; T["surrogate_p_reco_exists"] = pr; T["surrogate_reco_exists"] = rf
+    if a.ensemble:
+        mem = np.full(N_all, -1, np.int32); mem[pop_idx] = np.concatenate(MEMBER); T["surrogate_member"] = mem
+        pk = np.zeros((N_all, len(epi["draws"]))); pk[pop_idx] = np.stack([dr[4][:, 0] for dr in epi["draws"]], 1); T["surrogate_univ_p_reco_exists"] = pk
+    write_ntuple(a.out, out, extra_trees={"Truth": T})
+    print(f"{N_all} truth events ({pop.sum()} in the training volume) -> {exist.sum()} reconstructed ({exist.mean()*100:.1f}% of those) -> {a.out}")
 
 
 if __name__ == "__main__":

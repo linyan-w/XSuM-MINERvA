@@ -10,8 +10,8 @@ One event of generator truth, as the open dataset's `Truth` tree stores it:
 - **Final-state particles** after final-state interactions: species and three-momentum. Hadrons enter above 10 MeV kinetic
   energy; neutrons are kept; the primary lepton is one token like any other. The particle set is unordered.
 
-The input is a set, so any generator that writes a post-FSI particle list with a vertex can be run through the model
-(`scripts/curate/nuwro_to_truth.py`, `gibuu_to_truth.py`).
+The input is a set, so any generator that writes a post-FSI particle list with a vertex can be run through the model;
+the file layout is in `docs/generator_input.md`.
 
 ## Architecture
 
@@ -57,7 +57,9 @@ The surrogate is stochastic: a second draw from the same truth gives a different
 the learned detector resolution. The four members of the ensemble are independent trainings; their disagreement is the
 model uncertainty. `scripts/infer/surrogate_to_ntuple.py --ensemble` writes the nominal event (drawn from a random member
 per batch) and, per event, every member's event-level outputs with the same random numbers, as four systematic
-universes, plus per-universe weights for the flags that cannot be re-drawn. The recipe is in `surrogate_files.md`.
+universes, plus per-universe weights for the three flags that cannot be re-drawn (reconstructed, MINOS-matched, negative
+charge), one weight per flag and their product. Like the open dataset, the file has a `Truth` tree with every input event,
+so efficiencies have their denominator; the recipe is in `surrogate_files.md`.
 
 ## Validation
 

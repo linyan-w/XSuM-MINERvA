@@ -106,7 +106,12 @@ def main():
             out[k] = np.full(n, defaults[k], dtype=dt)
     if nested:
         print(f"note: {len(nested)} nested-vector branches cannot be written by uproot and are written as flat empty lists: {nested}")
-    write_ntuple(a.out, out, counter_names=counter_names)
+    extra = {}
+    if "Truth" in uproot.open(a.surrogate):  # the surrogate's Truth tree (every generated event) is copied as it is
+        T = uproot.open(a.surrogate)["Truth"]; tn = [k for k in T.keys() if not k.endswith("_sz")]; ta = T.arrays(tn, library="ak")
+        extra["Truth"] = {k: (ta[k] if T[k].typename.endswith("[]") else ak.to_numpy(ta[k])) for k in tn}
+        if a.truth_entries is None: a.truth_entries = float(T.num_entries)
+    write_ntuple(a.out, out, counter_names=counter_names, extra_trees=extra)
     with uproot.update(a.out) as f:
         f.mktree("Meta", {"POT_Used": np.float64, "POT_Total": np.float64, "Total_Reco_Entries": np.float64, "Total_Truth_Entries": np.float64})
         f["Meta"].extend({"POT_Used": np.array([a.pot]), "POT_Total": np.array([a.pot]), "Total_Reco_Entries": np.array([float(n)]),

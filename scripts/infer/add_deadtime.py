@@ -11,10 +11,13 @@ from xsum.io.writer import write_ntuple
 from xsum.io.deadtime import sample_deadtime, VARIABLE, DEFAULT_TABLE
 ap = argparse.ArgumentParser(); ap.add_argument("files", nargs="+"); ap.add_argument("--seed", type=int, default=0); ap.add_argument("--table", default=DEFAULT_TABLE); ap.add_argument("--force", action="store_true", help="redraw even if the branch exists"); a = ap.parse_args()
 for f in a.files:
-    t = uproot.open(f)["MasterAnaDev"]
+    fh = uproot.open(f); t = fh["MasterAnaDev"]; others = {}
+    for name in fh.keys(cycle=False):  # the other trees (Truth, Meta) are copied as they are
+        if name == "MasterAnaDev": continue
+        tt = fh[name]; nm = [k for k in tt.keys() if not k.endswith("_sz")]; ar = tt.arrays(nm, library="ak"); others[name] = {k: (ar[k] if tt[k].typename.endswith("[]") else ak.to_numpy(ar[k])) for k in nm}
     if VARIABLE in t.keys() and not a.force: print(f"{f}: has {VARIABLE} already"); continue
     names = [k for k in t.keys() if not k.endswith("_sz") and k != VARIABLE]; arr = t.arrays(names, library="ak")
     out = {k: (arr[k] if t[k].typename.endswith("[]") else ak.to_numpy(arr[k])) for k in names}
     out[VARIABLE] = sample_deadtime(out["MasterAnaDev_vtx"][:, 2], np.random.default_rng(a.seed + 7), a.table)
-    tmp = f + ".tmp"; write_ntuple(tmp, out); os.replace(tmp, f)
+    tmp = f + ".tmp"; write_ntuple(tmp, out, extra_trees=others); os.replace(tmp, f)
     print(f"{f}: {len(out[VARIABLE]):,} events, {VARIABLE} pass(<=1) {100 * (out[VARIABLE] <= 1).mean():.2f}%", flush=True)
