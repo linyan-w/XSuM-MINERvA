@@ -15,6 +15,7 @@ from ..data.compact import BucketBatchSampler, MODEL_NAMES, TIER1_NAMES, Compact
 from ..data.dataset import split_by_subrun
 from ..eval import plots
 from ..eval.metrics import binary_metrics, calibration_by_bin, confusion, multiclass_metrics, sample_vs_real_1d
+from ..device import DEVICE
 from ..models.surrogate import Surrogate
 from ..prep.features import event_features
 from ..constants import N_CLASSES, N_CLASSES_CCNUMU
@@ -50,7 +51,7 @@ def apply_holdout(d, split, exclude_inttype):
     return split
 
 
-def train(stems, out_dir, epochs=20, bs=1024, lr=3e-4, seed=0, device="cuda", d_model=128, n_layers=4,
+def train(stems, out_dir, epochs=20, bs=1024, lr=3e-4, seed=0, device=DEVICE, d_model=128, n_layers=4,
           flow_hidden=768, flow_layers=5, max_train_events=None, log_every=200, exclude_inttype=None,
           ke_cut_mev=10.0, keep_neutrons=True, zero_flags=True, bucket=True, population="ccnumu", init_seed=None):
     """init_seed: seed of the weight initialisation and the batch shuffling (ensemble members); the split and the transform keep `seed`."""
@@ -118,7 +119,7 @@ def write_data_table(stems, d, split, out_dir, epochs=None, n_params=None):
     (pathlib.Path(out_dir) / "tables" / "data.tex").write_text(txt + "\n")
 
 
-def load_model(path, device="cuda"):
+def load_model(path, device=DEVICE):
     ck = torch.load(path, map_location=device, weights_only=False)
     c = ck["config"]; m = Surrogate(c["d_model"], 4, c["n_layers"], c["flow_hidden"], c["flow_layers"], zero_flags=c.get("zero_flags", False), n_classes=c.get("n_classes", N_CLASSES_CCNUMU)).to(device)
     m.load_state_dict(ck["model"], strict=False); m.eval()  # old checkpoints lack the zero_fill buffer
@@ -128,7 +129,7 @@ def load_model(path, device="cuda"):
 
 
 @torch.no_grad()
-def evaluate(model, tf, d, idx_test, ld_test, out_dir, device="cuda", n_steps=64, seed=0, m1_metrics=None, samples=None):
+def evaluate(model, tf, d, idx_test, ld_test, out_dir, device=DEVICE, n_steps=64, seed=0, m1_metrics=None, samples=None):
     """Closure on the test split: Tier 0 / cardinality metrics, Tier 1 marginals + conditionals, classifier test.
     samples: a pre-drawn pass over idx_test (xsum.train.samples), else the model is sampled here."""
     out = pathlib.Path(out_dir); (out / "figures").mkdir(exist_ok=True); (out / "tables").mkdir(exist_ok=True)

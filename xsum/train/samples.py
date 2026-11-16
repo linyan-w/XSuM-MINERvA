@@ -9,13 +9,14 @@ import pathlib
 import numpy as np
 import torch
 
+from xsum.device import DEVICE
 from xsum.models.surrogate import PRONG_DIM_CAP
 from xsum.train.event_stage import to_dev
 
 FIELDS = ("exist", "minos", "charge", "nprong", "x1", "p0", "pn", "vclass", "pv", "prongs", "pmask")
 
 
-def sample_split(model, ld, n_steps=64, device="cuda", seed=0, prongs=True):
+def sample_split(model, ld, n_steps=64, device=DEVICE, seed=0, prongs=True):
     """Sample every batch of `ld` once (in loader order); returns {field: array over events}."""
     torch.manual_seed(seed); acc = {k: [] for k in FIELDS}
     with torch.no_grad():
@@ -33,7 +34,7 @@ def sample_split(model, ld, n_steps=64, device="cuda", seed=0, prongs=True):
     return out
 
 
-def get_samples(model, ld, idx, n_steps=64, cache=None, from_cache=None, device="cuda", seed=0, prongs=True):
+def get_samples(model, ld, idx, n_steps=64, cache=None, from_cache=None, device=DEVICE, seed=0, prongs=True):
     """Samples for the events `idx` (the loader's order): read from `from_cache` (rows picked by event index; the cache
     must cover every event of `idx`), else sampled now and written to `cache` if given."""
     if from_cache:

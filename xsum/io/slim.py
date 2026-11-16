@@ -9,22 +9,28 @@ import json
 import pathlib
 import awkward as ak
 import uproot
+import uproot.source.xrootd
 
 from .branches import RECO_TREE_BRANCHES, TRUTH_TREE_BRANCHES
 
 _TREE_BRANCHES = {"MasterAnaDev": RECO_TREE_BRANCHES, "Truth": TRUTH_TREE_BRANCHES}
 
 
-def slim_tree(root_path: str, tree: str, out_path: str, step_size: str = "200 MB",
+def slim_tree(root_path: str, tree: str, out_path: str, step_size: int | str = 50_000,
               entry_stop: int | None = None) -> int:
     """Write the selected branches of `tree` in `root_path` to a single Parquet file. Returns entries written.
 
     `root_path` may be a local path or an xrootd URL (root://...); uproot then streams only the needed baskets.
+    `step_size` is in entries: a size like "200 MB" makes uproot fetch every basket header first, one
+    round trip each, which crawls over a long-distance link.
     """
     branches = _TREE_BRANCHES[tree]
     chunks = []
     n = 0
-    with uproot.open(root_path) as f:
+    # root:// URLs go through uproot's native XRootD reader: the default fsspec-xrootd path fails on the
+    # chunked multi-branch reads below (TypeError: integer argument expected for offset)
+    handler = {"handler": uproot.source.xrootd.XRootDSource} if str(root_path).startswith("root://") else {}
+    with uproot.open(root_path, **handler) as f:
         t = f[tree]
         missing = [b for b in branches if b not in t.keys()]
         if missing:

@@ -19,6 +19,7 @@ import awkward as ak, numpy as np, torch
 from torch.utils.data import DataLoader
 
 from xsum.data.compact import CompactDataset, collate
+from xsum.device import DEVICE
 from xsum.io.writer import write_ntuple
 from xsum.io.deadtime import sample_deadtime, VARIABLE as DEADTIME_VARIABLE, DEFAULT_TABLE as DEADTIME_TABLE
 from xsum.prep.muon import decode_muon
@@ -52,6 +53,7 @@ def main():
     ap.add_argument("--n", type=int, default=None); ap.add_argument("--steps", type=int, default=64); ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--range", type=int, nargs=2, metavar=("START", "STOP"), default=None, help="input events [START, STOP) only (one slice of a large sample; merge the slices with scripts/infer/merge_ntuples.py)")
     ap.add_argument("--deadtime", default=DEADTIME_TABLE if pathlib.Path(DEADTIME_TABLE).exists() else None, help="empirical table of the dead-time cut variable (scripts/curate/deadtime_table.py); drawn per event by reconstructed vertex z, independently of the event; '' to skip")
+    ap.add_argument("--device", default=DEVICE, help=f"torch device, cuda or cpu (default: the GPU when one is available, else the CPU; here {DEVICE})")
     ap.add_argument("--ensemble", nargs="*", default=[], help="further members of an ensemble (model directories trained with other seeds, scripts/train/train_all.sh): the nominal sample draws each batch from a random member, and the epistemic columns are the spread between the members' common-noise draws instead of posterior draws")
     a = ap.parse_args()
     torch.manual_seed(a.seed)
@@ -69,14 +71,14 @@ def main():
     tier2 = ck["config"].get("tier2", False)
     d = truth_to_compact(truth, **sel)
     if tier2:
-        model, tf, ptf = m3.load_model(pathlib.Path(a.model_dir) / "model.pt")
+        model, tf, ptf = m3.load_model(pathlib.Path(a.model_dir) / "model.pt", device=a.device)
     else:
-        model, tf = m2.load_model(pathlib.Path(a.model_dir) / "model.pt"); ptf = None
+        model, tf = m2.load_model(pathlib.Path(a.model_dir) / "model.pt", device=a.device); ptf = None
     ds = CompactDataset(d, np.arange(len(truth)), tf, a.seed, prong_tf=ptf)  # ptf=None -> Tier 1 only
     loader = lambda: DataLoader(ds, batch_size=2048, collate_fn=collate, num_workers=4)
     members = [model]
     for md in a.ensemble:  # ensemble members share the split and the transforms (same data, same transform seed); checked on the scalings
-        m_, tf_, _ = m3.load_model(pathlib.Path(md) / "model.pt"); assert np.allclose(tf_.loc, tf.loc) and np.allclose(tf_.scale, tf.scale), f"{md}: transform differs from {a.model_dir}"; members.append(m_)
+        m_, tf_, _ = m3.load_model(pathlib.Path(md) / "model.pt", device=a.device); assert np.allclose(tf_.loc, tf.loc) and np.allclose(tf_.scale, tf.scale), f"{md}: transform differs from {a.model_dir}"; members.append(m_)
     if a.ensemble: print(f"ensemble of {len(members)} members: nominal sample per batch from a random member, epistemic columns from the spread between members", flush=True)
     MEMBER = []
 
@@ -89,7 +91,7 @@ def main():
             torch.manual_seed(seed * 100003 + i)  # per-batch seed: the event-level draw is identical between passes with and without prongs and across members (common noise)
             m_ = members[rng.integers(len(members))] if mixture else model
             if mixture: MEMBER.append(np.full(len(b["ctx"]), members.index(m_), np.int32))
-            s = m_.sample(to_dev(b, "cuda"), a.steps, prongs=prongs)
+            s = m_.sample(to_dev(b, a.device), a.steps, prongs=prongs)
             S.append(torch.cat([s["exist"][:, None].float(), s["minos"][:, None].float(), s["charge"][:, None].float(), s["nprong"][:, None].float(), s["x1"]], 1).cpu())
             P0.append(s["p0"].cpu()); PN.append(s["pn"].cpu())
             if tier2: PR.append(s["prongs"].cpu()); PM.append(s["pmask"].cpu()); VC.append(s["vclass"].cpu())

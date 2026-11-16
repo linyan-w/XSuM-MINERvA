@@ -16,6 +16,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 from xsum.data.compact import selection_from_config, subset_mask, load_compact, CompactDataset, collate
 from xsum.data.dataset import split_by_subrun
+from xsum.device import DEVICE
 from xsum.prep.features import event_features
 from xsum.train.prong_stage import load_model
 from xsum.train.event_stage import to_dev, _pad
@@ -26,7 +27,7 @@ def aucs(idx, model, tf, ptf, seed, null=0):
     ds = CompactDataset(d, idx, tf, 0, prong_tf=ptf); S, XR = [], []
     with torch.no_grad():
         for b in DataLoader(ds, batch_size=4096, collate_fn=collate, num_workers=4):
-            s = model.sample(to_dev(b, "cuda"), a.steps, prongs=False); S.append(torch.cat([s["minos"][:, None].float(), s["charge"][:, None].float(), s["nprong"][:, None].float(), s["x1"]], 1).cpu()); XR.append(b["x1"])
+            s = model.sample(to_dev(b, DEVICE), a.steps, prongs=False); S.append(torch.cat([s["minos"][:, None].float(), s["charge"][:, None].float(), s["nprong"][:, None].float(), s["x1"]], 1).cpu()); XR.append(b["x1"])
     S = torch.cat(S).numpy(); x_real_all = torch.cat(XR).numpy(); reco = d["reco_exists"][idx]; valid = ds.valid; sel = reco & valid
     x_real = x_real_all[sel]; x_fake = S[sel, 3:]; rv = idx[sel]; cls_p, mom_p, mask_p = _pad(d, rv); X, _ = event_features(cls_p, mom_p, mask_p, d["ctx"][rv]); t0 = d["tier0"][rv]
     Xr = np.concatenate([X, t0[:, 1:3], d["nprong"][rv][:, None], x_real], 1); Xf = np.concatenate([X, S[sel, :2], S[sel, 2:3], x_fake], 1)

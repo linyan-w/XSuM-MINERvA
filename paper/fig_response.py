@@ -13,6 +13,7 @@ from xsum.data.compact import load_compact, CompactDataset, collate, selection_f
 from xsum.data.dataset import split_by_subrun
 from xsum.prep.features import event_features
 from xsum.train.prong_stage import load_model
+from xsum.device import DEVICE
 from xsum.train.event_stage import to_dev, _pad
 from xsum.eval import plots
 NAMES = {"A": "full model", "B": "2p2h holdout"}  # legend names of the model labels
@@ -76,7 +77,7 @@ if not a.replot:
             with torch.no_grad():
                 for i_, b in enumerate(DataLoader(ds, batch_size=4096, collate_fn=collate, num_workers=4)):
                     torch.manual_seed(seed * 100003 + i_)  # per-batch seed: common noise across members
-                    s = mdl.sample(to_dev(b, "cuda"), 64); X1.append(s["x1"].cpu()); EX.append(s["exist"].cpu()); PR.append(s["prongs"].cpu()); PM.append(s["pmask"].cpu())
+                    s = mdl.sample(to_dev(b, DEVICE), 64); X1.append(s["x1"].cpu()); EX.append(s["exist"].cpu()); PR.append(s["prongs"].cpu()); PM.append(s["pmask"].cpu())
             Np = max(p.shape[1] for p in PR); PR_ = torch.cat([torch.nn.functional.pad(p, (0, 0, 0, Np - p.shape[1])) for p in PR]).numpy(); PM_ = torch.cat([torch.nn.functional.pad(p, (0, Np - p.shape[1])) for p in PM]).numpy()
             ex = torch.cat(EX).numpy(); X1_ = torch.cat(X1).numpy(); y = tf.inverse(X1_[ex], d["mu_true"][idx][ex], d["ctx"][idx][ex])
             pm = PM_[ex]; pr = ptf.inverse(PR_[ex][pm]); offs = np.concatenate([[0], np.cumsum(pm.sum(1))]); return summarise(ex, y, pr, offs)
