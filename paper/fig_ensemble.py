@@ -43,14 +43,15 @@ if "resP" in S["per_event"]["true angle [deg]"][0]:
             if i == 1: ax.set_xlabel(lab)
     axs[0, 0].legend(frameon=False, fontsize=7, loc="lower right"); plots.save(fig, out / "ensemble_perevent_res.png"); print("written", out / "ensemble_perevent_res.png")
 # ---- pulls of the marginal bin fractions without and with the between-member spread in the denominator
-KEYS = {"marg_recoil": "recoil energy", "marg_muP": "muon momentum", "marg_theta": "muon angle", "marg_vz": "vertex $z$"}; COL = [plots.PALETTE["real"], plots.PALETTE["model"], plots.PALETTE["third"], "0.6"]
+KEYS = {"marg_recoil": "recoil energy", "marg_muP": "muon momentum", "marg_theta": "muon angle", "marg_vz": "vertex $z$"}; COL = ["#08306b", "#2171b5", "#6baed6", "#c6dbef"]  # four steps of one blue ramp, ordered by lightness
 fig, ax = plots.plt.subplots(figsize=(4.4, 3.3)); b = np.linspace(-5, 5, 26); xx = np.linspace(-5, 5, 300); P = {}; P0 = {}
 for k in KEYS:
     rows = S["tables"][k]["rows"]; res = np.array([r["resid"] for r in rows]); st2 = np.array([r["stat"] for r in rows]) ** 2 + np.array([r["samp"] for r in rows]) ** 2
     P[k] = res / np.sqrt(st2 + np.array([r["ens"] for r in rows]) ** 2); P0[k] = res / np.sqrt(st2)
 allp = np.concatenate(list(P.values())); all0 = np.concatenate(list(P0.values()))
-ax.hist([np.clip(P[k], -4.99, 4.99) for k in KEYS], b, stacked=True, label=list(KEYS.values()), color=COL, alpha=0.8)
+ax.hist([np.clip(P[k], -4.99, 4.99) for k in KEYS], b, stacked=True, label=list(KEYS.values()), color=COL, edgecolor="white", linewidth=0.5)  # one hue, dark to light: the stacks stay apart in grey scale
 ax.plot(xx, len(allp) * (b[1] - b[0]) * np.exp(-xx ** 2 / 2) / np.sqrt(2 * np.pi), "k:", lw=1.2, label="unit Gaussian")
-ax.set_xlabel("pull"); ax.set_ylabel("bins"); ax.set_title(f"mean {np.mean(allp):+.2f}, RMS {np.sqrt(np.mean(allp ** 2)):.2f}", fontsize=8.5, loc="left")
+ax.set_xlabel("pull"); ax.set_ylabel("bins"); h_, _ = np.histogram(np.clip(allp, -4.99, 4.99), b); xc = 0.5 * (b[1:] + b[:-1]); ug = len(allp) * (b[1] - b[0]) * np.exp(-xc ** 2 / 2) / np.sqrt(2 * np.pi); chi2 = float((((h_ - ug) ** 2) / np.maximum(ug, 1)).sum()); ndf = int((ug > 0.5).sum())
+ax.set_title(f"mean {np.mean(allp):+.2f}, RMS {np.sqrt(np.mean(allp ** 2)):.2f}; unit Gaussian $\\chi^2$/ndf = {chi2:.1f}/{ndf}", fontsize=8.5, loc="left")
 ax.legend(frameon=False, fontsize=7, loc="upper left"); plots.save(fig, out / "ensemble_pulls.png"); print("written", out / "ensemble_pulls.png")
 pathlib.Path(a.spread).parent.joinpath("pull_macros.tex").write_text("% pulls of the marginal bin fractions, all four observables (paper/fig_ensemble.py)\n" + f"\\newcommand{{\\nEnsPullAllRMS}}{{{np.sqrt(np.mean(allp ** 2)):.2f}}}\n\\newcommand{{\\nEnsPullAllWithin}}{{{100 * np.mean(np.abs(allp) < 2):.0f}\\%}}\n\\newcommand{{\\nEnsPullAllMean}}{{{np.mean(allp):+.2f}}}\n\\newcommand{{\\nEnsPullAllBins}}{{{len(allp)}}}\n\\newcommand{{\\nEnsPullAllRMSnoens}}{{{np.sqrt(np.mean(all0 ** 2)):.2f}}}\n")

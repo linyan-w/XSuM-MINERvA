@@ -1,9 +1,10 @@
 {
  "vertex_class": {
-  "logloss": 3.3866093158721924,
-  "logloss_marginal": 1.6250009066442364,
-  "accuracy": 0.5398377065901234,
-  "accuracy_marginal": 0.31861499995486836,
+  "logloss": 0.6234038472175598,
+  "logloss_marginal": 1.6250026441296153,
+  "accuracy": 0.7538095762483911,
+  "accuracy_marginal": 0.31861253978369225,
+  "conditioning": "teacher forcing: the head scored with the open dataset's own vertex-z residual as input, as in training; the sampled draw enters only the snapped fraction and the marginals",
   "snapped_frac_real": 0.6813850000451317,
   "snapped_frac_sampled": 0.682058364248513,
   "marginal_real": [

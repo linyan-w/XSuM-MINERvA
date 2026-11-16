@@ -51,6 +51,13 @@ The released models:
 | `weights/full_s1`, `_s2`, `_s3` | same | 1, 2, 3 (initialisation and shuffling) |
 | `weights/holdout_2p2h` | same, with GENIE 2p2h events (interaction type 8) excluded | 0 |
 
+Each weights directory carries the evaluation of its stage-3 model on the test split: `metrics.json` (event level) and
+`metrics_tier2.json` (vertex plane, prongs, closure). The vertex-plane head is scored by teacher forcing: its log loss and accuracy
+in `metrics_tier2.json` are computed with the open dataset's own vertex-z residual as the head's input, as in training. The sampled
+draw cannot be scored that way, because after stage 3 the head follows the sampled residual, and a draw that lands on the other
+side of the near/far boundary from the real residual is counted as a confident miss however good the head is; the draw is
+compared through the snapped fraction and the class marginals instead, which are also in the file.
+
 ## Uncertainties
 
 The surrogate is stochastic: a second draw from the same truth gives a different reconstructed event, and that spread is

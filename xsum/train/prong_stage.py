@@ -117,6 +117,24 @@ def _event_prong_summary(theta, kin, piP, pf, pP, sc, ex, offsets):
     return out
 
 
+VTX_CONDITIONING = "teacher forcing: the head scored with the open dataset's own vertex-z residual as input, as in training; the sampled draw enters only the snapped fraction and the marginals"
+
+
+@torch.no_grad()
+def vertex_teacher_forced(model, ld, device="cuda"):
+    """Vertex-plane head scored with the open dataset's own vertex-z residual as input (teacher forcing, as in training), over the
+    reconstructed, valid events of `ld` in loader order: (class probabilities, real class). The sampled draw cannot be scored this
+    way: a head conditioned on a sampled residual is confidently 'wrong' whenever the draw and the real residual fall on different
+    sides of the near/far boundary, which is a property of the draw, not of the head."""
+    import torch.nn.functional as F
+    P, Y = [], []
+    for b in ld:
+        b = m2.to_dev(b, device); z = model.encode(b); t0 = b["tier0"]; fl = (t0[:, 0] > 0) & (b["valid"] > 0)
+        flags = model.full_flags(z[fl], t0[fl, 1:3], b["zflags"][fl]) if model.zero_flags else t0[fl, 1:3]; cond = model.flow_cond(z[fl], flags, b["nprong"][fl])
+        P.append(F.softmax(model.vtx_logits(cond, b["vphase"][fl], b["x1"][fl][:, 5:6]), -1).cpu()); Y.append(b["vclass"][fl].cpu())
+    return torch.cat(P).numpy(), torch.cat(Y).numpy()
+
+
 @torch.no_grad()
 def evaluate_tier2(model, tf, ptf, d, idx_test, ld_test, out_dir, device="cuda", n_steps=64, seed=0, samples=None):
     """samples: a pre-drawn pass over idx_test (xsum.train.samples), else the model is sampled here."""
@@ -130,7 +148,8 @@ def evaluate_tier2(model, tf, ptf, d, idx_test, ld_test, out_dir, device="cuda",
     M = {}
     # ---- vertex class ----
     vc_real = tf.planes.classify(d["tier1"][ir, 5], d["ctx"][ir, 2])
-    M["vertex_class"] = multiclass_metrics(vc_real, PV[reco]); M["vertex_class"]["snapped_frac_real"] = float((vc_real > 0).mean()); M["vertex_class"]["snapped_frac_sampled"] = float((VC[reco] > 0).mean())
+    Ptf, Ytf = vertex_teacher_forced(model, ld_test, device)
+    M["vertex_class"] = multiclass_metrics(Ytf, Ptf); M["vertex_class"]["conditioning"] = VTX_CONDITIONING; M["vertex_class"]["snapped_frac_real"] = float((vc_real > 0).mean()); M["vertex_class"]["snapped_frac_sampled"] = float((VC[reco] > 0).mean())
     M["vertex_class"]["marginal_real"] = np.bincount(vc_real, minlength=9).tolist(); M["vertex_class"]["marginal_sampled"] = np.bincount(VC[reco], minlength=9).tolist()
     # decoded reco z: snapped -> plane, else flow residual
     y_fake = tf.inverse(X1[reco], d["mu_true"][ir], d["ctx"][ir])
