@@ -122,7 +122,7 @@ VTX_CONDITIONING = "teacher forcing: the head scored with the open dataset's own
 
 
 @torch.no_grad()
-def vertex_teacher_forced(model, ld, device="cuda"):
+def vertex_teacher_forced(model, ld, device=DEVICE):
     """Vertex-plane head scored with the open dataset's own vertex-z residual as input (teacher forcing, as in training), over the
     reconstructed, valid events of `ld` in loader order: (class probabilities, real class). The sampled draw cannot be scored this
     way: a head conditioned on a sampled residual is confidently 'wrong' whenever the draw and the real residual fall on different
