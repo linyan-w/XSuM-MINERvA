@@ -16,6 +16,7 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=None, help="initialisation and shuffling seed (ensemble members); the split stays at seed 0"); ap.add_argument("--flow-hidden", type=int, default=768); ap.add_argument("--flow-layers", type=int, default=5); ap.add_argument("--steps", type=int, default=100)
     a = ap.parse_args()
     from xsum.train.event_stage import train, evaluate, load_model, make_loaders, write_data_table
+    from xsum.device import DEVICE
     from xsum.data.compact import load_compact, selection_from_config, Tier1Transform
     from xsum.data.dataset import split_by_subrun
     stems = a.stems or sorted(p[:-len(".truth.parquet")] for p in glob.glob(f"{a.slim_dir}/*.truth.parquet"))
@@ -37,7 +38,7 @@ if __name__ == "__main__":
         model, tf = load_model(pathlib.Path(a.out_dir) / "model.pt")
         idx, ds, ld = make_loaders(d, split, tf, a.bs, 0)
     else:
-        d, split, tf, idx, ld, out = train(stems, a.out_dir, a.epochs, a.bs, a.lr, 0, "cuda", a.d_model, a.n_layers, a.flow_hidden, a.flow_layers, max_train_events=a.max_train, exclude_inttype=a.exclude_inttype, ke_cut_mev=a.ke_cut, keep_neutrons=a.neutrons, zero_flags=a.zero_flags, bucket=a.bucket, population=a.population, init_seed=a.seed)
+        d, split, tf, idx, ld, out = train(stems, a.out_dir, a.epochs, a.bs, a.lr, 0, DEVICE, a.d_model, a.n_layers, a.flow_hidden, a.flow_layers, max_train_events=a.max_train, exclude_inttype=a.exclude_inttype, ke_cut_mev=a.ke_cut, keep_neutrons=a.neutrons, zero_flags=a.zero_flags, bucket=a.bucket, population=a.population, init_seed=a.seed)
         model, tf = load_model(pathlib.Path(a.out_dir) / "model.pt")
     idx, ld = restrict(d, idx, ld, tf)
     m1 = None

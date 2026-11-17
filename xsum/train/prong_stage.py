@@ -16,6 +16,7 @@ from ..data.dataset import split_by_subrun
 from ..data.prongs_tf import ProngTransform, VertexPlaneTable
 from ..eval import plots
 from ..eval.metrics import multiclass_metrics, sample_vs_real_1d
+from ..device import DEVICE
 from ..models.surrogate import Surrogate
 from ..prep.features import event_features
 from . import event_stage as m2
@@ -43,7 +44,7 @@ def fit_transforms(d, split, seed):
     return tf, ptf
 
 
-def train(stems, out_dir, init_from=None, epochs=12, bs=1024, lr=2e-4, seed=0, device="cuda",
+def train(stems, out_dir, init_from=None, epochs=12, bs=1024, lr=2e-4, seed=0, device=DEVICE,
           prong_layers=3, log_every=500, exclude_inttype=None, ke_cut_mev=None, keep_neutrons=None, vtx_cond_z=False, only_vtx=False, init_seed=None):  # selection inherited from the M2 model
     """vtx_cond_z: vertex-class head conditioned on the reco z residual (see Surrogate); only_vtx: train the vertex head alone, everything else
     frozen (warm start from a finished M3 model), for the head-only stage that makes the snapping class consistent with the flow's z."""
@@ -93,7 +94,7 @@ def train(stems, out_dir, init_from=None, epochs=12, bs=1024, lr=2e-4, seed=0, d
     return d, split, tf, ptf, idx, ld
 
 
-def load_model(path, device="cuda"):
+def load_model(path, device=DEVICE):
     ck = torch.load(path, map_location=device, weights_only=False); c = ck["config"]
     m = Surrogate(c["d_model"], 4, c["n_layers"], c["flow_hidden"], c["flow_layers"], tier2=True, prong_layers=c.get("prong_layers", 3), zero_flags=c.get("zero_flags", False), n_classes=c.get("n_classes", 13), vtx_cond_z=c.get("vtx_cond_z", False)).to(device)
     m.load_state_dict(ck["model"], strict=False); m.eval()  # old checkpoints lack the zero_fill buffer
@@ -121,7 +122,7 @@ VTX_CONDITIONING = "teacher forcing: the head scored with the open dataset's own
 
 
 @torch.no_grad()
-def vertex_teacher_forced(model, ld, device="cuda"):
+def vertex_teacher_forced(model, ld, device=DEVICE):
     """Vertex-plane head scored with the open dataset's own vertex-z residual as input (teacher forcing, as in training), over the
     reconstructed, valid events of `ld` in loader order: (class probabilities, real class). The sampled draw cannot be scored this
     way: a head conditioned on a sampled residual is confidently 'wrong' whenever the draw and the real residual fall on different
@@ -136,7 +137,7 @@ def vertex_teacher_forced(model, ld, device="cuda"):
 
 
 @torch.no_grad()
-def evaluate_tier2(model, tf, ptf, d, idx_test, ld_test, out_dir, device="cuda", n_steps=64, seed=0, samples=None):
+def evaluate_tier2(model, tf, ptf, d, idx_test, ld_test, out_dir, device=DEVICE, n_steps=64, seed=0, samples=None):
     """samples: a pre-drawn pass over idx_test (xsum.train.samples), else the model is sampled here."""
     out = pathlib.Path(out_dir); (out / "figures").mkdir(exist_ok=True); (out / "tables").mkdir(exist_ok=True)
     rng = np.random.default_rng(seed)

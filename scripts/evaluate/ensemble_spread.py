@@ -14,6 +14,7 @@ from xsum.data.compact import load_compact, CompactDataset, collate, selection_f
 from xsum.data.dataset import split_by_subrun
 from xsum.train.prong_stage import load_model
 from xsum.train.event_stage import to_dev
+from xsum.device import DEVICE
 from xsum.prep.frames import theta_phi_beam
 from xsum.prep.volumes import in_volume
 from xsum.eval import plots
@@ -29,7 +30,7 @@ def one_pass(md, seed):
     model, tf, ptf = load_model(f"{md}/model.pt"); ds = CompactDataset(d, idx, tf, 0, prong_tf=ptf); torch.manual_seed(seed); X1, ex, mi, ch, VC = [], [], [], [], []
     with torch.no_grad():
         for b in DataLoader(ds, batch_size=4096, collate_fn=collate, num_workers=4):
-            s = model.sample(to_dev(b, "cuda"), a.steps, prongs=False); X1.append(s["x1"].cpu()); ex.append(s["exist"].cpu()); mi.append(s["minos"].cpu()); ch.append(s["charge"].cpu()); VC.append(s["vclass"].cpu())
+            s = model.sample(to_dev(b, DEVICE), a.steps, prongs=False); X1.append(s["x1"].cpu()); ex.append(s["exist"].cpu()); mi.append(s["minos"].cpu()); ch.append(s["charge"].cpu()); VC.append(s["vclass"].cpu())
     x1 = torch.cat(X1).numpy(); vc = torch.cat(VC).numpy(); y = tf.inverse(x1, d["mu_true"][idx], d["ctx"][idx]); zs = tf.planes.z_for_class(vc, d["ctx"][idx, 2], y[:, 5]); y[:, 5] = np.where(vc > 0, zs, y[:, 5])
     ex = torch.cat(ex).numpy(); print(f"{md} (seed {seed}): sampled {len(idx):,} events, reco {ex.mean():.4f}", flush=True)
     return ex, torch.cat(mi).numpy(), torch.cat(ch).numpy(), y
